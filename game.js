@@ -11,10 +11,11 @@ function shuffle(a) {
 class GameError extends Error {}
 const fail = (msg) => { throw new GameError(msg); };
 
-function buildDeck() {
+function buildDeck(copies = 1) {
   let n = 0;
   const id = () => 'c' + n++;
   const deck = [];
+  for (let k = 0; k < copies; k++) {
   for (const [shape, count] of Object.entries(R.PATH_COUNTS))
     for (let i = 0; i < count; i++) deck.push({ id: id(), type: 'path', shape });
   for (const t of R.TOOLS) for (let i = 0; i < 3; i++) deck.push({ id: id(), type: 'broken', tool: t });
@@ -22,6 +23,7 @@ function buildDeck() {
   [['pick', 'lamp'], ['pick', 'cart'], ['lamp', 'cart']].forEach((ts) => deck.push({ id: id(), type: 'repair', tools: ts }));
   for (let i = 0; i < 6; i++) deck.push({ id: id(), type: 'map' });
   for (let i = 0; i < 3; i++) deck.push({ id: id(), type: 'rockfall' });
+  }
   return shuffle(deck);
 }
 
@@ -32,17 +34,21 @@ class Game {
     this.players = players.map((p) => p.id); // seat order
     this.names = Object.fromEntries(players.map((p) => [p.id, p.name]));
     this.totalRounds = opts.rounds || 3;
+    this.twoSided = !!opts.twoSided;
+    this.range = R.xRange(this.twoSided);
+    this.goals = R.goalLayout(this.twoSided);
+    const copies = this.twoSided ? 2 : 1;
     this.round = 0;
     this.scores = Object.fromEntries(this.players.map((p) => [p, 0]));
-    this.goldDeck = shuffle([...Array(16).fill(1), ...Array(8).fill(2), ...Array(4).fill(3)]);
+    this.goldDeck = shuffle([...Array(16 * copies).fill(1), ...Array(8 * copies).fill(2), ...Array(4 * copies).fill(3)]);
     this.startIdx = Math.floor(Math.random() * this.players.length);
     this.log = [];
     this.logSeq = 0;
     this.startRound();
   }
 
-  addLog(text) {
-    this.log.push({ id: ++this.logSeq, text });
+  addLog(text, meta) {
+    this.log.push({ id: ++this.logSeq, text, ...(meta || {}) });
     if (this.log.length > 80) this.log.shift();
   }
   nm(pid) { return this.names[pid] || '?'; }
@@ -54,21 +60,22 @@ class Game {
     this.result = null;
     this.goldFinder = null;
 
-    const [sab, dig] = R.ROLE_TABLE[n];
+    const [sab, dig] = R.roleCounts(n, this.twoSided);
     const pool = shuffle([...Array(sab).fill('saboteur'), ...Array(dig).fill('digger')]);
     this.roles = Object.fromEntries(this.players.map((p, i) => [p, pool[i]]));
 
-    this.deck = buildDeck();
-    const hs = R.handSize(n);
+    this.deck = buildDeck(this.twoSided ? 2 : 1);
+    const hs = R.handSizeFor(n, this.twoSided);
     this.hands = Object.fromEntries(this.players.map((p) => [p, this.deck.splice(0, hs)]));
     this.broken = Object.fromEntries(this.players.map((p) => [p, { pick: false, lamp: false, cart: false }]));
     this.knownGoals = Object.fromEntries(this.players.map((p) => [p, {}]));
 
     this.board = {};
     this.board[R.key(0, 0)] = { x: 0, y: 0, kind: 'start', shape: 'start', flipped: false };
-    const goals = shuffle(['gold', 'coal1', 'coal2']);
-    R.GOAL_POS.forEach(([x, y], i) => {
-      this.board[R.key(x, y)] = { x, y, kind: 'goal', goal: goals[i], goalIdx: i, hidden: true, flipped: false };
+    // one gold hidden among the goal cards (3 classic, 6 in two-sided mode, so players must pick a side)
+    const types = this.twoSided ? shuffle(['gold', 'coal1', 'coal2', 'coal1', 'coal2', 'coal1']) : shuffle(['gold', 'coal1', 'coal2']);
+    this.goals.forEach(({ x, y }, i) => {
+      this.board[R.key(x, y)] = { x, y, kind: 'goal', goal: types[i], goalIdx: i, hidden: true, flipped: false };
     });
 
     this.turnIdx = this.startIdx;
@@ -102,7 +109,8 @@ class Game {
     if (this.hasBroken(pid)) fail('你有工具壞咗，修好先可以放通道');
     x = Number(x); y = Number(y);
     if (!Number.isInteger(x) || !Number.isInteger(y)) fail('位置錯誤');
-    if (!R.canPlacePath(this.board, c.shape, !!flipped, x, y)) fail('呢個位置放唔到');
+    if (x < this.range[0] || x > this.range[1]) fail(this.twoSided ? '超出礦道範圍' : '只可以由入口向右邊挖');
+    if (!R.canPlacePath(this.board, c.shape, !!flipped, x, y, null, this.range)) fail('呢個位置放唔到');
     this.board[R.key(x, y)] = { x, y, kind: 'path', shape: c.shape, flipped: !!flipped };
     this.discardFromHand(pid, cardId);
     this.addLog(`${this.nm(pid)} 挖咗一條通道`);
@@ -120,12 +128,12 @@ class Game {
         g.hidden = false;
         const open = R.openEdges(R.groupsFor(g.goal, false));
         g.flipped = ![...touchedGoals[k]].some((e) => open.has(e));
-        const label = R.GOAL_LABEL[g.goalIdx];
+        const label = this.goals[g.goalIdx].label;
         if (g.goal === 'gold') {
-          this.addLog(`💰 ${this.nm(pid)} 挖到${label}方嘅金礦！`);
+          this.addLog(`💰 ${this.nm(pid)} 挖到${label}方嘅金礦！`, { kind: 'gold', goalIdx: g.goalIdx, who: this.nm(pid) });
           this.goldFinder = this.goldFinder || pid;
         } else {
-          this.addLog(`⚫ ${label}方目標係煤礦…`);
+          this.addLog(`⚫ ${label}方目標係煤礦…`, { kind: 'coal', goalIdx: g.goalIdx });
         }
       }
     }
@@ -165,8 +173,9 @@ class Game {
     const cell = this.board[k];
     if (!cell || cell.kind !== 'path') fail('只可以炸走普通通道牌');
     delete this.board[k];
+    this.lastRockfall = { x: cell.x, y: cell.y };
     this.discardFromHand(pid, cardId);
-    this.addLog(`💥 ${this.nm(pid)} 炸塌咗一段通道`);
+    this.addLog(`💥 ${this.nm(pid)} 炸塌咗一段通道`, { kind: 'rockfall', x: cell.x, y: cell.y });
     this.endTurn();
   }
 
@@ -179,7 +188,7 @@ class Game {
     if (!g.hidden) fail('呢張目標已經揭開咗');
     this.knownGoals[pid][g.goalIdx] = g.goal === 'gold' ? 'gold' : 'coal';
     this.discardFromHand(pid, cardId);
-    this.addLog(`🗺️ ${this.nm(pid)} 偷睇咗${R.GOAL_LABEL[g.goalIdx]}方目標`);
+    this.addLog(`🗺️ ${this.nm(pid)} 偷睇咗${this.goals[g.goalIdx].label}方目標`);
     this.endTurn();
     return { goalIdx: g.goalIdx, goal: this.knownGoals[pid][g.goalIdx] };
   }
@@ -259,21 +268,29 @@ class Game {
       } else o.shape = c.shape;
       return o;
     });
+    const gameOver = this.phase === 'gameEnd';
+    const res = this.result;
     return {
       round: this.round,
       totalRounds: this.totalRounds,
       phase: this.phase,
+      twoSided: this.twoSided,
+      range: this.range,
+      goalLabels: this.goals.map((g) => g.label),
       deckCount: this.deck.length,
       board,
       turnPid: this.phase === 'playing' ? this.current() : null,
       hand: this.hands[pid] || [],
       role: this.roles[pid] || null,
       knownGoals: this.knownGoals[pid] || {},
+      // gold is kept face down: you only see your own until the game ends
       seats: this.players.map((p) => ({
-        id: p, handCount: this.hands[p].length, broken: this.broken[p], score: this.scores[p],
+        id: p, handCount: this.hands[p].length, broken: this.broken[p],
+        score: p === pid || gameOver ? this.scores[p] : null,
       })),
       log: this.log.slice(-40),
-      result: this.result,
+      // identities are never revealed to other players
+      result: res && { winner: res.winner, finder: res.finder, myRole: res.roles[pid] || null, myGain: res.gains[pid] || 0 },
     };
   }
 }

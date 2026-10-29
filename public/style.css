@@ -339,3 +339,20 @@ img.fx-nugget { width: min(42vw, 170px); height: auto; top: 28%; }
   .hand { grid-column: 2; grid-row: 6; flex-wrap: wrap; align-content: flex-start; overflow-y: auto; overflow-x: visible; padding-top: 16px; }
   .card { width: 116px; height: 148px; }
 }
+
+/* lobby setting + private result */
+.setting { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg2); cursor: pointer; }
+.setting input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--gold); flex: 0 0 auto; }
+.setting span { display: flex; flex-direction: column; gap: 2px; }
+.setting small { color: var(--muted); font-size: 12px; }
+.my-result { display: flex; gap: 12px; align-items: center; text-align: left; margin: 12px 0; padding: 10px; border-radius: 12px; background: var(--bg2); border: 1px solid var(--line); }
+.my-result.won { border-color: var(--gold-d); background: rgba(240,185,58,.08); }
+.my-result img { width: 64px; height: auto; border-radius: 6px; flex: 0 0 auto; }
+.my-result div { display: flex; flex-direction: column; gap: 2px; }
+.my-result small { color: var(--muted); font-size: 12px; }
+.my-result .role-name { font-size: 22px; }
+.my-result .gain { color: var(--gold); }
+.secret-note { font-size: 12px; color: var(--muted) !important; }
+.cell .glabel { white-space: nowrap; font-size: 9px; padding: 0 3px; }
+.zoom { flex-direction: row; right: 6px; bottom: 6px; gap: 6px; }
+.zoom button { width: 32px; height: 30px; font-size: 14px; }

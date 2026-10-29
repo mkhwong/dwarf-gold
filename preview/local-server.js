@@ -3,7 +3,7 @@
 (function () {
   const R = window.SabRules;
   const { Game, GameError } = window.DGGame;
-  const BOT_NAMES = ['小美', '大雄', '阿珍', '志明', '春嬌', '阿強', '靜宜', '家豪', '肥仔', '細佬'];
+  const BOT_NAMES = ['小美', '大雄', '阿珍', '志明', '春嬌', '阿強', '靜宜', '家豪', '肥仔', '細佬', '阿芬', '阿輝', '嘉欣', '子健', '曉晴', '偉文', '詠詩', '浩然', '美玲'];
   const listeners = {};
   let room = null;
   let botTimer = null;
@@ -17,6 +17,7 @@
     return {
       code: room.code, hostId: room.hostId, me: pid,
       phase: room.game ? room.game.phase : 'lobby',
+      settings: room.settings,
       players: room.players.map((p) => ({ id: p.id, name: p.name, connected: true })),
       game: room.game ? room.game.view(pid) : null,
     };
@@ -65,7 +66,7 @@
       let best = null;
       for (const c of hand.filter((x) => x.type === 'path'))
         for (const f of [false, true])
-          for (const [x, y] of R.validPlacements(g.board, c.shape, f)) {
+          for (const [x, y] of R.validPlacements(g.board, c.shape, f, g.range)) {
             const b2 = Object.assign({}, g.board, { [R.key(x, y)]: { x, y, kind: 'path', shape: c.shape, flipped: f } });
             const f1 = frontier(b2);
             const sc = role === 'digger'
@@ -137,7 +138,7 @@
   const H = {
     create({ name }) {
       const me = { id: newId(), name: String(name).trim().slice(0, 12), bot: false };
-      room = { code: genCode(), hostId: me.id, players: [me], game: null };
+      room = { code: genCode(), hostId: me.id, players: [me], game: null, settings: { twoSided: false } };
       push();
       return { code: room.code };
     },
@@ -145,9 +146,10 @@
     resume() { fail('冇房間'); },
     add_bot() {
       if (!room || room.game) fail('而家唔可以加人');
-      if (room.players.length >= 10) fail('房間已滿（最多 10 人）');
+      const max = R.MAX_PLAYERS(room.settings.twoSided);
+      if (room.players.length >= max) fail(`房間已滿（最多 ${max} 人）`);
       const used = new Set(room.players.map((p) => p.name));
-      const name = BOT_NAMES.find((n) => !used.has(n)) || 'AI' + room.players.length;
+      const name = BOT_NAMES.find((n) => !used.has(n)) || 'AI ' + room.players.length;
       room.players.push({ id: newId(), name, bot: true });
       push();
     },
@@ -157,9 +159,15 @@
       push();
     },
     leave() { clearTimeout(botTimer); room = null; },
+    settings({ twoSided }) {
+      if (room.game && room.game.phase !== 'gameEnd') fail('遊戲進行中唔可以改設定');
+      if (!twoSided && room.players.length > 10) fail('超過 10 人要用雙邊模式');
+      room.settings.twoSided = !!twoSided;
+      push();
+    },
     start() {
       if (room.players.length < 3) fail('最少要 3 個玩家');
-      room.game = new Game(room.players.map((p) => ({ id: p.id, name: p.name })));
+      room.game = new Game(room.players.map((p) => ({ id: p.id, name: p.name })), { twoSided: room.settings.twoSided });
       push();
     },
     next_round() { room.game.nextRound(); push(); },

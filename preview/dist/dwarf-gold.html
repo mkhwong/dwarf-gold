@@ -345,6 +345,23 @@ img.fx-nugget { width: min(42vw, 170px); height: auto; top: 28%; }
   .card { width: 116px; height: 148px; }
 }
 
+/* lobby setting + private result */
+.setting { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; margin-bottom: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg2); cursor: pointer; }
+.setting input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--gold); flex: 0 0 auto; }
+.setting span { display: flex; flex-direction: column; gap: 2px; }
+.setting small { color: var(--muted); font-size: 12px; }
+.my-result { display: flex; gap: 12px; align-items: center; text-align: left; margin: 12px 0; padding: 10px; border-radius: 12px; background: var(--bg2); border: 1px solid var(--line); }
+.my-result.won { border-color: var(--gold-d); background: rgba(240,185,58,.08); }
+.my-result img { width: 64px; height: auto; border-radius: 6px; flex: 0 0 auto; }
+.my-result div { display: flex; flex-direction: column; gap: 2px; }
+.my-result small { color: var(--muted); font-size: 12px; }
+.my-result .role-name { font-size: 22px; }
+.my-result .gain { color: var(--gold); }
+.secret-note { font-size: 12px; color: var(--muted) !important; }
+.cell .glabel { white-space: nowrap; font-size: 9px; padding: 0 3px; }
+.zoom { flex-direction: row; right: 6px; bottom: 6px; gap: 6px; }
+.zoom button { width: 32px; height: 30px; font-size: 14px; }
+
 
 :root { color-scheme: dark; }
 html, body { height: 100%; }
@@ -476,6 +493,22 @@ body { background: var(--bg); }
   const TOOL_ICON = { pick: '⛏️', lamp: '🔦', cart: '🛒' };
   const GOAL_POS = [[8, -2], [8, 0], [8, 2]];
   const GOAL_LABEL = ['上', '中', '下'];
+  // goal layout: classic = 3 goals on the right; two-sided = 3 on the right + 3 on the left
+  function goalLayout(twoSided) {
+    const right = GOAL_POS.map(([x, y], i) => ({ x, y, label: (twoSided ? '右' : '') + GOAL_LABEL[i] }));
+    if (!twoSided) return right;
+    return right.concat(GOAL_POS.map(([x, y], i) => ({ x: -x, y, label: '左' + GOAL_LABEL[i] })));
+  }
+  // columns cards may be placed in: from the start card towards the gold only
+  const xRange = (twoSided) => (twoSided ? [-8, 8] : [0, 8]);
+  const MAX_PLAYERS = (twoSided) => (twoSided ? 20 : 10);
+  // two-sided mode doubles the classic table for half the table size
+  function roleCounts(n, twoSided) {
+    if (!twoSided) return ROLE_TABLE[n];
+    const [s, d] = ROLE_TABLE[Math.max(3, Math.ceil(n / 2))];
+    return [s * 2, d * 2];
+  }
+  const handSizeFor = (n, twoSided) => handSize(twoSided ? Math.max(3, Math.ceil(n / 2)) : n);
 
   // players -> [saboteurs, gold diggers] in the role pool (one card left unused)
   const ROLE_TABLE = {
@@ -527,8 +560,9 @@ body { background: var(--bg); }
   }
 
   // Goal cards (hidden or revealed) never block placement; other neighbours must match edges.
-  function canPlacePath(board, shape, flipped, x, y, reach) {
+  function canPlacePath(board, shape, flipped, x, y, reach, range) {
     if (board[key(x, y)]) return false;
+    if (range && (x < range[0] || x > range[1])) return false;
     reach = reach || computeReach(board);
     const open = openEdges(groupsFor(shape, flipped));
     let hasNeighbor = false, connects = false;
@@ -558,19 +592,21 @@ body { background: var(--bg); }
     return { minX, maxX, minY, maxY };
   }
 
-  function validPlacements(board, shape, flipped) {
+  function validPlacements(board, shape, flipped, range) {
     const reach = computeReach(board);
     const b = bounds(board);
     const out = [];
+    const x0 = range ? Math.max(range[0], b.minX - 1) : b.minX - 1;
+    const x1 = range ? Math.min(range[1], b.maxX + 1) : b.maxX + 1;
     for (let y = b.minY - 1; y <= b.maxY + 1; y++)
-      for (let x = b.minX - 1; x <= b.maxX + 1; x++)
-        if (canPlacePath(board, shape, flipped, x, y, reach)) out.push([x, y]);
+      for (let x = x0; x <= x1; x++)
+        if (canPlacePath(board, shape, flipped, x, y, reach, range)) out.push([x, y]);
     return out;
   }
 
   return {
     DIRS, DELTA, OPP, key, SHAPES, PATH_COUNTS, TOOLS, TOOL_NAME, TOOL_ICON,
-    GOAL_POS, GOAL_LABEL, ROLE_TABLE, handSize,
+    GOAL_POS, GOAL_LABEL, ROLE_TABLE, handSize, goalLayout, xRange, MAX_PLAYERS, roleCounts, handSizeFor,
     groupsFor, cellGroups, openEdges, computeReach, canPlacePath, validPlacements, bounds,
   };
 });
@@ -591,10 +627,11 @@ function shuffle(a) {
 class GameError extends Error {}
 const fail = (msg) => { throw new GameError(msg); };
 
-function buildDeck() {
+function buildDeck(copies = 1) {
   let n = 0;
   const id = () => 'c' + n++;
   const deck = [];
+  for (let k = 0; k < copies; k++) {
   for (const [shape, count] of Object.entries(R.PATH_COUNTS))
     for (let i = 0; i < count; i++) deck.push({ id: id(), type: 'path', shape });
   for (const t of R.TOOLS) for (let i = 0; i < 3; i++) deck.push({ id: id(), type: 'broken', tool: t });
@@ -602,6 +639,7 @@ function buildDeck() {
   [['pick', 'lamp'], ['pick', 'cart'], ['lamp', 'cart']].forEach((ts) => deck.push({ id: id(), type: 'repair', tools: ts }));
   for (let i = 0; i < 6; i++) deck.push({ id: id(), type: 'map' });
   for (let i = 0; i < 3; i++) deck.push({ id: id(), type: 'rockfall' });
+  }
   return shuffle(deck);
 }
 
@@ -612,17 +650,21 @@ class Game {
     this.players = players.map((p) => p.id); // seat order
     this.names = Object.fromEntries(players.map((p) => [p.id, p.name]));
     this.totalRounds = opts.rounds || 3;
+    this.twoSided = !!opts.twoSided;
+    this.range = R.xRange(this.twoSided);
+    this.goals = R.goalLayout(this.twoSided);
+    const copies = this.twoSided ? 2 : 1;
     this.round = 0;
     this.scores = Object.fromEntries(this.players.map((p) => [p, 0]));
-    this.goldDeck = shuffle([...Array(16).fill(1), ...Array(8).fill(2), ...Array(4).fill(3)]);
+    this.goldDeck = shuffle([...Array(16 * copies).fill(1), ...Array(8 * copies).fill(2), ...Array(4 * copies).fill(3)]);
     this.startIdx = Math.floor(Math.random() * this.players.length);
     this.log = [];
     this.logSeq = 0;
     this.startRound();
   }
 
-  addLog(text) {
-    this.log.push({ id: ++this.logSeq, text });
+  addLog(text, meta) {
+    this.log.push({ id: ++this.logSeq, text, ...(meta || {}) });
     if (this.log.length > 80) this.log.shift();
   }
   nm(pid) { return this.names[pid] || '?'; }
@@ -634,21 +676,22 @@ class Game {
     this.result = null;
     this.goldFinder = null;
 
-    const [sab, dig] = R.ROLE_TABLE[n];
+    const [sab, dig] = R.roleCounts(n, this.twoSided);
     const pool = shuffle([...Array(sab).fill('saboteur'), ...Array(dig).fill('digger')]);
     this.roles = Object.fromEntries(this.players.map((p, i) => [p, pool[i]]));
 
-    this.deck = buildDeck();
-    const hs = R.handSize(n);
+    this.deck = buildDeck(this.twoSided ? 2 : 1);
+    const hs = R.handSizeFor(n, this.twoSided);
     this.hands = Object.fromEntries(this.players.map((p) => [p, this.deck.splice(0, hs)]));
     this.broken = Object.fromEntries(this.players.map((p) => [p, { pick: false, lamp: false, cart: false }]));
     this.knownGoals = Object.fromEntries(this.players.map((p) => [p, {}]));
 
     this.board = {};
     this.board[R.key(0, 0)] = { x: 0, y: 0, kind: 'start', shape: 'start', flipped: false };
-    const goals = shuffle(['gold', 'coal1', 'coal2']);
-    R.GOAL_POS.forEach(([x, y], i) => {
-      this.board[R.key(x, y)] = { x, y, kind: 'goal', goal: goals[i], goalIdx: i, hidden: true, flipped: false };
+    // one gold hidden among the goal cards (3 classic, 6 in two-sided mode, so players must pick a side)
+    const types = this.twoSided ? shuffle(['gold', 'coal1', 'coal2', 'coal1', 'coal2', 'coal1']) : shuffle(['gold', 'coal1', 'coal2']);
+    this.goals.forEach(({ x, y }, i) => {
+      this.board[R.key(x, y)] = { x, y, kind: 'goal', goal: types[i], goalIdx: i, hidden: true, flipped: false };
     });
 
     this.turnIdx = this.startIdx;
@@ -682,7 +725,8 @@ class Game {
     if (this.hasBroken(pid)) fail('你有工具壞咗，修好先可以放通道');
     x = Number(x); y = Number(y);
     if (!Number.isInteger(x) || !Number.isInteger(y)) fail('位置錯誤');
-    if (!R.canPlacePath(this.board, c.shape, !!flipped, x, y)) fail('呢個位置放唔到');
+    if (x < this.range[0] || x > this.range[1]) fail(this.twoSided ? '超出礦道範圍' : '只可以由入口向右邊挖');
+    if (!R.canPlacePath(this.board, c.shape, !!flipped, x, y, null, this.range)) fail('呢個位置放唔到');
     this.board[R.key(x, y)] = { x, y, kind: 'path', shape: c.shape, flipped: !!flipped };
     this.discardFromHand(pid, cardId);
     this.addLog(`${this.nm(pid)} 挖咗一條通道`);
@@ -700,12 +744,12 @@ class Game {
         g.hidden = false;
         const open = R.openEdges(R.groupsFor(g.goal, false));
         g.flipped = ![...touchedGoals[k]].some((e) => open.has(e));
-        const label = R.GOAL_LABEL[g.goalIdx];
+        const label = this.goals[g.goalIdx].label;
         if (g.goal === 'gold') {
-          this.addLog(`💰 ${this.nm(pid)} 挖到${label}方嘅金礦！`);
+          this.addLog(`💰 ${this.nm(pid)} 挖到${label}方嘅金礦！`, { kind: 'gold', goalIdx: g.goalIdx, who: this.nm(pid) });
           this.goldFinder = this.goldFinder || pid;
         } else {
-          this.addLog(`⚫ ${label}方目標係煤礦…`);
+          this.addLog(`⚫ ${label}方目標係煤礦…`, { kind: 'coal', goalIdx: g.goalIdx });
         }
       }
     }
@@ -745,8 +789,9 @@ class Game {
     const cell = this.board[k];
     if (!cell || cell.kind !== 'path') fail('只可以炸走普通通道牌');
     delete this.board[k];
+    this.lastRockfall = { x: cell.x, y: cell.y };
     this.discardFromHand(pid, cardId);
-    this.addLog(`💥 ${this.nm(pid)} 炸塌咗一段通道`);
+    this.addLog(`💥 ${this.nm(pid)} 炸塌咗一段通道`, { kind: 'rockfall', x: cell.x, y: cell.y });
     this.endTurn();
   }
 
@@ -759,7 +804,7 @@ class Game {
     if (!g.hidden) fail('呢張目標已經揭開咗');
     this.knownGoals[pid][g.goalIdx] = g.goal === 'gold' ? 'gold' : 'coal';
     this.discardFromHand(pid, cardId);
-    this.addLog(`🗺️ ${this.nm(pid)} 偷睇咗${R.GOAL_LABEL[g.goalIdx]}方目標`);
+    this.addLog(`🗺️ ${this.nm(pid)} 偷睇咗${this.goals[g.goalIdx].label}方目標`);
     this.endTurn();
     return { goalIdx: g.goalIdx, goal: this.knownGoals[pid][g.goalIdx] };
   }
@@ -839,21 +884,29 @@ class Game {
       } else o.shape = c.shape;
       return o;
     });
+    const gameOver = this.phase === 'gameEnd';
+    const res = this.result;
     return {
       round: this.round,
       totalRounds: this.totalRounds,
       phase: this.phase,
+      twoSided: this.twoSided,
+      range: this.range,
+      goalLabels: this.goals.map((g) => g.label),
       deckCount: this.deck.length,
       board,
       turnPid: this.phase === 'playing' ? this.current() : null,
       hand: this.hands[pid] || [],
       role: this.roles[pid] || null,
       knownGoals: this.knownGoals[pid] || {},
+      // gold is kept face down: you only see your own until the game ends
       seats: this.players.map((p) => ({
-        id: p, handCount: this.hands[p].length, broken: this.broken[p], score: this.scores[p],
+        id: p, handCount: this.hands[p].length, broken: this.broken[p],
+        score: p === pid || gameOver ? this.scores[p] : null,
       })),
       log: this.log.slice(-40),
-      result: this.result,
+      // identities are never revealed to other players
+      result: res && { winner: res.winner, finder: res.finder, myRole: res.roles[pid] || null, myGain: res.gains[pid] || 0 },
     };
   }
 }
@@ -868,7 +921,7 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
 (function () {
   const R = window.SabRules;
   const { Game, GameError } = window.DGGame;
-  const BOT_NAMES = ['小美', '大雄', '阿珍', '志明', '春嬌', '阿強', '靜宜', '家豪', '肥仔', '細佬'];
+  const BOT_NAMES = ['小美', '大雄', '阿珍', '志明', '春嬌', '阿強', '靜宜', '家豪', '肥仔', '細佬', '阿芬', '阿輝', '嘉欣', '子健', '曉晴', '偉文', '詠詩', '浩然', '美玲'];
   const listeners = {};
   let room = null;
   let botTimer = null;
@@ -882,6 +935,7 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
     return {
       code: room.code, hostId: room.hostId, me: pid,
       phase: room.game ? room.game.phase : 'lobby',
+      settings: room.settings,
       players: room.players.map((p) => ({ id: p.id, name: p.name, connected: true })),
       game: room.game ? room.game.view(pid) : null,
     };
@@ -930,7 +984,7 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
       let best = null;
       for (const c of hand.filter((x) => x.type === 'path'))
         for (const f of [false, true])
-          for (const [x, y] of R.validPlacements(g.board, c.shape, f)) {
+          for (const [x, y] of R.validPlacements(g.board, c.shape, f, g.range)) {
             const b2 = Object.assign({}, g.board, { [R.key(x, y)]: { x, y, kind: 'path', shape: c.shape, flipped: f } });
             const f1 = frontier(b2);
             const sc = role === 'digger'
@@ -1002,7 +1056,7 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
   const H = {
     create({ name }) {
       const me = { id: newId(), name: String(name).trim().slice(0, 12), bot: false };
-      room = { code: genCode(), hostId: me.id, players: [me], game: null };
+      room = { code: genCode(), hostId: me.id, players: [me], game: null, settings: { twoSided: false } };
       push();
       return { code: room.code };
     },
@@ -1010,9 +1064,10 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
     resume() { fail('冇房間'); },
     add_bot() {
       if (!room || room.game) fail('而家唔可以加人');
-      if (room.players.length >= 10) fail('房間已滿（最多 10 人）');
+      const max = R.MAX_PLAYERS(room.settings.twoSided);
+      if (room.players.length >= max) fail(`房間已滿（最多 ${max} 人）`);
       const used = new Set(room.players.map((p) => p.name));
-      const name = BOT_NAMES.find((n) => !used.has(n)) || 'AI' + room.players.length;
+      const name = BOT_NAMES.find((n) => !used.has(n)) || 'AI ' + room.players.length;
       room.players.push({ id: newId(), name, bot: true });
       push();
     },
@@ -1022,9 +1077,15 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
       push();
     },
     leave() { clearTimeout(botTimer); room = null; },
+    settings({ twoSided }) {
+      if (room.game && room.game.phase !== 'gameEnd') fail('遊戲進行中唔可以改設定');
+      if (!twoSided && room.players.length > 10) fail('超過 10 人要用雙邊模式');
+      room.settings.twoSided = !!twoSided;
+      push();
+    },
     start() {
       if (room.players.length < 3) fail('最少要 3 個玩家');
-      room.game = new Game(room.players.map((p) => ({ id: p.id, name: p.name })));
+      room.game = new Game(room.players.map((p) => ({ id: p.id, name: p.name })), { twoSided: room.settings.twoSided });
       push();
     },
     next_round() { room.game.nextRound(); push(); },
@@ -1076,15 +1137,17 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
   }
   function resize() {
     dpr = Math.min(2, window.devicePixelRatio || 1);
-    cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+    cv.width = Math.round(cv.clientWidth * dpr); cv.height = Math.round(cv.clientHeight * dpr);
   }
   const wait = (ms) => new Promise((r) => setTimeout(r, reduce ? Math.min(ms, 350) : ms));
   const rnd = (a, b) => a + Math.random() * (b - a);
 
   // ---------- particles ----------
   function loop() {
+    if (cv.width !== Math.round(cv.clientWidth * dpr) || cv.height !== Math.round(cv.clientHeight * dpr)) resize();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, innerWidth, innerHeight);
     parts = parts.filter((p) => (p.life -= 1 / 60) > 0);
     for (const p of parts) {
       p.vy += p.g; p.vx *= p.drag; p.vy *= p.drag;
@@ -1107,7 +1170,7 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
       }
       ctx.restore();
     }
-    raf = parts.length ? requestAnimationFrame(loop) : (ctx.clearRect(0, 0, innerWidth, innerHeight), null);
+    raf = parts.length ? requestAnimationFrame(loop) : (ctx.setTransform(1, 0, 0, 1, 0, 0), ctx.clearRect(0, 0, cv.width, cv.height), null);
   }
   function emit(n, mk) {
     if (reduce) return;
@@ -1356,8 +1419,9 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
     s += `<rect width="56" height="80" rx="4" fill="none" stroke="rgba(0,0,0,.45)" stroke-width="2"/>`;
     return s + '</svg>';
   }
+  const goalLabel = (idx) => (state && state.game && state.game.goalLabels ? state.game.goalLabels[idx] : R.GOAL_LABEL[idx]) || '';
   function goalBackSVG(idx) {
-    return `<img class="gback" src="${CARD('back')}" alt="目標牌"><span class="glabel">${R.GOAL_LABEL[idx]}</span>`;
+    return `<img class="gback" src="${CARD('back')}" alt="目標牌"><span class="glabel">${goalLabel(idx)}</span>`;
   }
   function cellSVG(c) {
     if (c.kind === 'goal') {
@@ -1404,7 +1468,9 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
   function renderLobby() {
     $('#codeBig').textContent = state.code;
     $('#lobby .hint').textContent = LOCAL ? '預覽版：用「＋ 加 AI 玩家」代替朋友入房' : '撳代碼複製邀請連結';
-    $('#lobbyCount').textContent = `${state.players.length}/10`;
+    const two = !!(state.settings && state.settings.twoSided);
+    const maxP = R.MAX_PLAYERS(two);
+    $('#lobbyCount').textContent = `${state.players.length}/${maxP}`;
     $('#lobbyList').innerHTML = state.players.map((p) => `
       <li><span class="nm">${esc(p.name)}${p.id === me() ? '（你）' : ''}</span>
         ${p.id === state.hostId ? '<span class="tag">房主</span>' : ''}
@@ -1412,8 +1478,10 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
         ${isHost() && p.id !== me() ? `<button class="kick" data-kick="${p.id}">踢走</button>` : ''}</li>`).join('');
     const n = state.players.length;
     $('#lobbyActions').innerHTML = isHost()
-      ? (LOCAL ? `<button id="botBtn" class="btn" ${n >= 10 ? 'disabled' : ''}>＋ 加 AI 玩家</button>` : '') + `<button id="startBtn" class="btn primary big" ${n < 3 ? 'disabled' : ''}>${n < 3 ? `等多 ${3 - n} 個人…` : '開始遊戲'}</button>`
-      : `<div class="waiting">等房主開始遊戲…</div>`;
+      ? `<label class="setting" for="twoSidedToggle"><input type="checkbox" id="twoSidedToggle" ${two ? 'checked' : ''}>
+          <span><b>雙邊模式</b><small>左右兩邊各 3 張目標牌（得一張係金礦）、牌量加倍，最多 20 人</small></span></label>` +
+        (LOCAL ? `<button id="botBtn" class="btn" ${n >= maxP ? 'disabled' : ''}>＋ 加 AI 玩家</button>` : '') + `<button id="startBtn" class="btn primary big" ${n < 3 ? 'disabled' : ''}>${n < 3 ? `等多 ${3 - n} 個人…` : '開始遊戲'}</button>`
+      : `<div class="waiting">${two ? '雙邊模式（左右各 3 張目標牌）· ' : ''}等房主開始遊戲…</div>`;
   }
 
   // ---------- game ----------
@@ -1442,7 +1510,7 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
       const br = R.TOOLS.filter((t) => s.broken[t]).map((t) => R.TOOL_ICON[t]).join('');
       return `<div data-seat="${s.id}" class="seat ${s.id === g.turnPid ? 'turn' : ''} ${s.id === meId ? 'me' : ''} ${p.connected === false ? 'off' : ''}">
         <div class="s-name">${esc(p.name || '?')}</div>
-        <div class="s-meta"><span>🂠${s.handCount}</span><span><img class="ico" src="${ART('nugget')}" alt="金">${s.score}</span></div>
+        <div class="s-meta"><span>🂠${s.handCount}</span>${s.score == null ? '' : `<span><img class="ico" src="${ART('nugget')}" alt="金">${s.score}</span>`}</div>
         <div class="s-meta s-broken">${br ? br + ' 壞' : '&nbsp;'}</div></div>`;
     }).join('');
 
@@ -1467,10 +1535,12 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
     const g = state.game;
     const board = boardObj();
     const b = R.bounds(board);
-    const minX = b.minX - 1, minY = b.minY - 1, maxX = b.maxX + 1, maxY = b.maxY + 1;
+    const rg = g.range || [b.minX - 1, b.maxX + 1];
+    const minX = Math.max(rg[0], b.minX - 1), minY = b.minY - 1, maxX = Math.min(rg[1], b.maxX + 1), maxY = b.maxY + 1;
     const cols = maxX - minX + 1, rows = maxY - minY + 1;
     const view = $('#board');
-    const availW = view.clientWidth - BOARD_PAD * 2, availH = view.clientHeight - BOARD_PAD * 2;
+    const ZOOM_BAR = 40; // keep the bottom strip free for the zoom buttons
+    const availW = view.clientWidth - BOARD_PAD * 2, availH = view.clientHeight - BOARD_PAD * 2 - ZOOM_BAR;
     const fit = Math.max(0.3, Math.min(availW / (cols * 56), availH / (rows * 80), 2));
     const z = zoomMode === 'fit' ? fit : manualScale;
     renderBoard.fitScale = fit;
@@ -1481,7 +1551,7 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
     const canAct = myTurn() && g.phase === 'playing';
     let slots = [];
     if (canAct && card && card.type === 'path' && !hasBroken(me()))
-      slots = R.validPlacements(board, card.shape, flipped);
+      slots = R.validPlacements(board, card.shape, flipped, g.range);
 
     let html = '';
     const keys = new Set();
@@ -1504,7 +1574,7 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
     inner.style.width = innerW + 'px';
     inner.style.height = innerH + 'px';
     inner.style.marginLeft = Math.max(BOARD_PAD, (view.clientWidth - innerW) / 2) + 'px';
-    inner.style.marginTop = Math.max(BOARD_PAD, (view.clientHeight - innerH) / 2) + 'px';
+    inner.style.marginTop = Math.max(BOARD_PAD, (view.clientHeight - ZOOM_BAR - innerH) / 2) + 'px';
     inner.innerHTML = html;
 
     renderBoard.geom = { minX, minY, cw, ch };
@@ -1516,7 +1586,8 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
     const el = $('#board');
     // centre on the middle of the start→goal corridor
     const r = $('#boardInner');
-    const cx = (4 - geom.minX + 0.5) * geom.cw + r.offsetLeft;
+    const rg = (state.game && state.game.range) || [0, 8];
+    const cx = ((rg[0] + rg[1]) / 2 - geom.minX + 0.5) * geom.cw + r.offsetLeft;
     const cy = (0 - geom.minY + 0.5) * geom.ch + r.offsetTop;
     el.scrollLeft = cx - el.clientWidth / 2;
     el.scrollTop = cy - el.clientHeight / 2;
@@ -1582,8 +1653,8 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
       if (turn && hasBroken(me())) html += `<span class="ab-desc" style="color:#ff9d94">你有工具壞咗，唔可以放通道。</span>`;
       else if (turn) {
         const board = boardObj();
-        const here = R.validPlacements(board, card.shape, flipped).length;
-        const other = R.validPlacements(board, card.shape, !flipped).length;
+        const here = R.validPlacements(board, card.shape, flipped, g.range).length;
+        const other = R.validPlacements(board, card.shape, !flipped, g.range).length;
         if (!here) html += `<span class="ab-desc">${other ? '呢個方向冇位放，試下轉向。' : '呢張牌冇位放，可以棄牌。'}</span>`;
       }
     }
@@ -1628,17 +1699,13 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
     }
     const lastId = pg.log.reduce((m, l) => Math.max(m, l.id), 0);
     for (const l of g.log.filter((x) => x.id > lastId)) {
-      const lab = l.text.match(/(上|中|下)方/);
-      if (FX && l.text.startsWith('⚫') && lab) {
-        const goal = g.board.find((c) => c.kind === 'goal' && c.goalIdx === R.GOAL_LABEL.indexOf(lab[1]));
+      if (!FX) break;
+      if (l.kind === 'coal') {
+        const goal = g.board.find((c) => c.kind === 'goal' && c.goalIdx === l.goalIdx);
         if (goal) FX.coal(...cellScreen(goal.x, goal.y, renderBoard.geom));
       }
-      if (FX && l.text.startsWith('💰')) FX.goldStrike(esc(l.text.replace(/^💰\s*/, '').split(' 挖到')[0]));
-      if (FX && l.text.startsWith('💥') && prevGeom) {
-        const now = new Set(g.board.map((c) => R.key(c.x, c.y)));
-        const gone = pg.board.find((c) => !now.has(R.key(c.x, c.y)));
-        if (gone) FX.rockfall(...cellScreen(gone.x, gone.y, prevGeom), $('.board-wrap'));
-      }
+      if (l.kind === 'gold') FX.goldStrike(esc(l.who || ''));
+      if (l.kind === 'rockfall' && prevGeom) FX.rockfall(...cellScreen(l.x, l.y, prevGeom), $('.board-wrap'));
     }
     if (FX) for (const s of g.seats) {
       const ps = pg.seats.find((x) => x.id === s.id);
@@ -1695,18 +1762,26 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
     if (!res) return;
     const end = g.phase === 'gameEnd';
     const dig = res.winner === 'digger';
-    const rows = [...g.seats].sort((a, b) => b.score - a.score).map((s) => {
-      const role = res.roles[s.id];
-      const won = role === res.winner;
-      return `<tr class="${won ? 'win' : ''}"><td><img class="rthumb" src="${roleArt(role, s.id, g.round)}" alt="">${esc(nameOf(s.id))}<span class="badge ${role}">${role === 'saboteur' ? '破壞者' : '金礦工'}</span>${res.finder === s.id ? ` <img class="ico" src="${ART('nugget')}" alt="挖到金">` : ''}</td>
-        <td class="r gain">${res.gains[s.id] ? '+' + res.gains[s.id] : ''}</td><td class="r">${s.score}</td></tr>`;
-    }).join('');
-    let title = dig ? '⛏️ 金礦工勝利！' : '🧨 破壞者勝利！';
-    let extra = '';
+    const mine = g.seats.find((x) => x.id === me()) || {};
+    const myRole = res.myRole;
+    const iWon = myRole === res.winner;
+    const title = dig ? '⛏️ 金礦工勝利！' : '🧨 破壞者勝利！';
+    const finder = res.finder ? `<p>${esc(nameOf(res.finder))} 挖通咗去金礦</p>` : `<p>冇人挖到金礦</p>`;
+    // only your own identity and gold are shown; everyone else stays secret
+    const me_ = `<div class="my-result ${iWon ? 'won' : ''}">
+        <img src="${roleArt(myRole, me(), g.round)}" alt="">
+        <div><small>你今回合係</small><b class="role-name ${myRole}">${myRole === 'saboteur' ? '破壞者' : '金礦工'}</b>
+        <span>${res.myGain ? `得到 <b class="gain">+${res.myGain}</b> 金` : '今回合冇金'}${end ? '' : ` · 你總共 <b>${mine.score ?? 0}</b> 金`}</span></div></div>`;
+    let board = '';
     if (end) {
-      const top = Math.max(...g.seats.map((s) => s.score));
+      const top = Math.max(...g.seats.map((s) => s.score || 0));
+      const rows = [...g.seats].sort((a, b) => (b.score || 0) - (a.score || 0)).map((s, i) => `
+        <tr class="${s.score === top ? 'win' : ''}"><td>${s.score === top ? '🏆 ' : `${i + 1}. `}${esc(nameOf(s.id))}${s.id === me() ? '（你）' : ''}</td><td class="r">${s.score}</td></tr>`).join('');
       const winners = g.seats.filter((s) => s.score === top).map((s) => esc(nameOf(s.id)));
-      extra = `<h2 style="margin-top:14px">🏆 ${winners.join('、')} 贏咗成局！</h2>`;
+      board = `<h2 style="margin-top:14px">${winners.join('、')} 贏咗成局！</h2>
+        <table class="res-table"><tr><td style="color:var(--muted)">玩家</td><td class="r" style="color:var(--muted)">總金</td></tr>${rows}</table>`;
+    } else {
+      board = `<p class="secret-note">其他人嘅身份同金數保密，完局先公佈總金。</p>`;
     }
     const hostBtn = isHost()
       ? (end ? `<button class="btn primary" id="lobbyBtn">返回大廳</button><button class="btn" id="againBtn">同一班人再玩</button>`
@@ -1716,16 +1791,15 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
       <img class="res-art" src="${end ? ART('dwarf-gold') : dig ? ART('dwarf-cart') : ART('tnt')}" alt="">
       <h2>${title}</h2>
       <p>第 ${g.round}/${g.totalRounds} 回合完結</p>
-      ${extra}
-      <table class="res-table"><tr><td style="color:var(--muted)">玩家</td><td class="r" style="color:var(--muted)">今回合</td><td class="r" style="color:var(--muted)">總金</td></tr>${rows}</table>
+      ${finder}
+      ${me_}
+      ${board}
       ${hostBtn}
       <button class="btn ghost" id="viewBoard">睇返個礦</button>`, (el) => {
       const nb = el.querySelector('#nextBtn'); if (nb) nb.onclick = () => emit('next_round');
       const lb = el.querySelector('#lobbyBtn'); if (lb) lb.onclick = () => emit('to_lobby');
       const ab = el.querySelector('#againBtn'); if (ab) ab.onclick = () => emit('start');
-      el.querySelector('#viewBoard').onclick = () => {
-        closeModal();
-      };
+      el.querySelector('#viewBoard').onclick = () => { closeModal(); };
     });
   }
 
@@ -1773,6 +1847,9 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
     if (e.target.id === 'startBtn') emit('start');
     if (e.target.id === 'botBtn') emit('add_bot');
   };
+  $('#lobbyActions').addEventListener('change', (e) => {
+    if (e.target.id === 'twoSidedToggle') emit('settings', { twoSided: e.target.checked }).then((r) => { if (!r.ok) render(); });
+  });
 
   $('#roleBtn').onclick = () => { roleVisible = !roleVisible; renderGame(); };
 
@@ -1821,7 +1898,7 @@ window.DGGame = { Game, GameError, ROLE_NAME, buildDeck };
         selId = null;
         const gold = r.peek.goal === 'gold';
         const face = cellSVG({ kind: 'goal', goal: gold ? 'gold' : 'coal1', flipped: false });
-        showModal(`<h2>🗺️ ${R.GOAL_LABEL[r.peek.goalIdx]}方目標</h2>
+        showModal(`<h2>🗺️ ${goalLabel(r.peek.goalIdx)}方目標</h2>
           <div class="flip"><div class="flip-inner go"><div class="front">${goalBackSVG(r.peek.goalIdx)}</div><div class="back">${face}</div></div></div>
           <div class="role-name ${gold ? 'digger' : 'saboteur'}">${gold ? '金礦！' : '煤礦'}</div>
           <p>只有你知道。地圖上會幫你標記住。</p><button class="btn primary" id="okPeek">知道</button>`,

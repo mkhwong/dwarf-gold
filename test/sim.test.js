@@ -50,7 +50,7 @@ server.listen(0, async () => {
         let best = null;
         for (const card of g.hand.filter(x => x.type === 'path'))
           for (const f of [false, true])
-            for (const [x, y] of R.validPlacements(board, card.shape, f)) {
+            for (const [x, y] of R.validPlacements(board, card.shape, f, g.range)) {
               const sc = x * 10 - Math.abs(y) + (R.SHAPES[card.shape].some(gr => gr.length === 1) ? -50 : 0);
               if (!best || sc > best.sc) best = { sc, card, x, y, f };
             }
@@ -83,6 +83,13 @@ server.listen(0, async () => {
     }
     const st = bots[0].st;
     assert(['roundEnd', 'gameEnd'].includes(st.game.phase), 'round ended: ' + st.game.phase);
+    // privacy: nobody receives other players' roles, gains or (before the end) gold
+    for (const b of bots) {
+      const r = b.st.game.result;
+      assert(!('roles' in r) && !('gains' in r), 'result leaks identities');
+      if (b.st.game.phase !== 'gameEnd') assert(b.st.game.seats.every((x) => x.id === b.st.me || x.score === null), 'scores leak');
+      assert(b.st.game.board.filter((c) => c.kind === 'path').every((c) => c.x >= 0), 'card left of start');
+    }
     outcomes.push(st.game.result.winner); console.log('maxX', Math.max(...st.game.board.filter(b=>b.kind==='path').map(b=>b.x)), st.game.log.filter(l=>/礦|勝/.test(l.text)).map(l=>l.text).join(' | '));
     if (round < 3) { assert((await call(bots[0], 'next_round')).ok); await new Promise(r => setTimeout(r, 50)); }
   }

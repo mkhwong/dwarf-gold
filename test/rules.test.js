@@ -65,3 +65,40 @@ g2.hands[other].push({ id: 'rp', type: 'repair', tools: ['pick', 'lamp'] });
 g2.playTool(other, 'rp', other);
 assert(!g2.broken[other].pick);
 console.log('rules tests passed');
+
+// classic: nothing may be placed left of the start card
+{
+  const g = new Game([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }, { id: 'c', name: 'C' }]);
+  const p = g.current();
+  g.hands[p].push({ id: 'lw', type: 'path', shape: 'ew' });
+  assert.throws(() => g.playPath(p, 'lw', -1, 0, false), /向右/);
+  assert(R.validPlacements(g.board, 'ew', false, g.range).every(([x]) => x >= 0));
+  const v = g.view('b');
+  assert.deepStrictEqual(v.range, [0, 8]);
+}
+// two-sided: 6 goals (one gold among them), double deck, up to 20 players, private views
+{
+  const ps = Array.from({ length: 20 }, (_, i) => ({ id: 'p' + i, name: 'P' + i }));
+  const g = new Game(ps, { twoSided: true });
+  const goals = Object.values(g.board).filter((c) => c.kind === 'goal');
+  assert.strictEqual(goals.length, 6);
+  assert.strictEqual(goals.filter((c) => c.goal === 'gold').length, 1);
+  assert.strictEqual(goals.filter((c) => c.x < 0).length, 3);
+  assert.strictEqual(g.deck.length + 20 * 4, 134);
+  const roles = Object.values(g.roles);
+  assert(roles.filter((r) => r === 'saboteur').length <= 8);
+  const p = g.current();
+  g.hands[p].push({ id: 'lw', type: 'path', shape: 'ew' });
+  g.playPath(p, 'lw', -1, 0, false); // left side allowed in two-sided mode
+  // reach the left gold to end the round, then check privacy
+  for (let x = -2; x >= -7; x--) g.board[R.key(x, 0)] = { x, y: 0, kind: 'path', shape: 'ew', flipped: false };
+  const leftMid = g.board['-8,0'];
+  g.checkGoals(p);
+  if (leftMid.goal === 'gold') {
+    g.endTurn();
+    const v = g.view('p3');
+    assert(v.result && !('roles' in v.result) && v.result.myRole);
+    assert(v.seats.filter((s) => s.score !== null).length === 1);
+  }
+}
+console.log('two-sided + privacy tests passed');

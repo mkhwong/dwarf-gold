@@ -46,6 +46,22 @@
   const TOOL_ICON = { pick: '⛏️', lamp: '🔦', cart: '🛒' };
   const GOAL_POS = [[8, -2], [8, 0], [8, 2]];
   const GOAL_LABEL = ['上', '中', '下'];
+  // goal layout: classic = 3 goals on the right; two-sided = 3 on the right + 3 on the left
+  function goalLayout(twoSided) {
+    const right = GOAL_POS.map(([x, y], i) => ({ x, y, label: (twoSided ? '右' : '') + GOAL_LABEL[i] }));
+    if (!twoSided) return right;
+    return right.concat(GOAL_POS.map(([x, y], i) => ({ x: -x, y, label: '左' + GOAL_LABEL[i] })));
+  }
+  // columns cards may be placed in: from the start card towards the gold only
+  const xRange = (twoSided) => (twoSided ? [-8, 8] : [0, 8]);
+  const MAX_PLAYERS = (twoSided) => (twoSided ? 20 : 10);
+  // two-sided mode doubles the classic table for half the table size
+  function roleCounts(n, twoSided) {
+    if (!twoSided) return ROLE_TABLE[n];
+    const [s, d] = ROLE_TABLE[Math.max(3, Math.ceil(n / 2))];
+    return [s * 2, d * 2];
+  }
+  const handSizeFor = (n, twoSided) => handSize(twoSided ? Math.max(3, Math.ceil(n / 2)) : n);
 
   // players -> [saboteurs, gold diggers] in the role pool (one card left unused)
   const ROLE_TABLE = {
@@ -97,8 +113,9 @@
   }
 
   // Goal cards (hidden or revealed) never block placement; other neighbours must match edges.
-  function canPlacePath(board, shape, flipped, x, y, reach) {
+  function canPlacePath(board, shape, flipped, x, y, reach, range) {
     if (board[key(x, y)]) return false;
+    if (range && (x < range[0] || x > range[1])) return false;
     reach = reach || computeReach(board);
     const open = openEdges(groupsFor(shape, flipped));
     let hasNeighbor = false, connects = false;
@@ -128,19 +145,21 @@
     return { minX, maxX, minY, maxY };
   }
 
-  function validPlacements(board, shape, flipped) {
+  function validPlacements(board, shape, flipped, range) {
     const reach = computeReach(board);
     const b = bounds(board);
     const out = [];
+    const x0 = range ? Math.max(range[0], b.minX - 1) : b.minX - 1;
+    const x1 = range ? Math.min(range[1], b.maxX + 1) : b.maxX + 1;
     for (let y = b.minY - 1; y <= b.maxY + 1; y++)
-      for (let x = b.minX - 1; x <= b.maxX + 1; x++)
-        if (canPlacePath(board, shape, flipped, x, y, reach)) out.push([x, y]);
+      for (let x = x0; x <= x1; x++)
+        if (canPlacePath(board, shape, flipped, x, y, reach, range)) out.push([x, y]);
     return out;
   }
 
   return {
     DIRS, DELTA, OPP, key, SHAPES, PATH_COUNTS, TOOLS, TOOL_NAME, TOOL_ICON,
-    GOAL_POS, GOAL_LABEL, ROLE_TABLE, handSize,
+    GOAL_POS, GOAL_LABEL, ROLE_TABLE, handSize, goalLayout, xRange, MAX_PLAYERS, roleCounts, handSizeFor,
     groupsFor, cellGroups, openEdges, computeReach, canPlacePath, validPlacements, bounds,
   };
 });

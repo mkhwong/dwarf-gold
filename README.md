@@ -1,6 +1,6 @@
 # 矮人掘金 · Dwarf Gold
 
-Online version of the board game Saboteur (矮人掘金) for 3–10 players, Traditional Chinese UI, phone-first.
+Online version of the board game Saboteur (矮人掘金) for 3–10 players (up to 20 in two-sided mode), Traditional Chinese UI, phone-first.
 Rooms work like the werewolf platform: the host opens a room, shares the 4-letter code (or invite link `?room=CODE`), everyone joins with a name — no accounts.
 
 ## Run locally
@@ -27,11 +27,19 @@ Free instances sleep when idle; rooms live in memory, so a restart clears open r
 - Hand size 6 / 5 / 4 for 3–5 / 6–7 / 8–10 players. Deck = 40 path + 27 action cards.
 - Start card at (0,0), three face-down goals 8 columns away (1 gold, 2 coal), shuffled each round.
 - Path cards must connect to the start through open tunnels and match every neighbour edge; 180° rotation allowed. Goal cards never block placement.
+- Mining only goes from the start card towards the goals: nothing can be placed left of the start (columns 0–8).
 - Broken tool (⛏️🔦🛒) on another player blocks their path placement; repair cards (single or double) fix one tool, including your own.
 - Map: privately peek at one goal (stays marked on your board). Rockfall: remove any normal path card.
 - Pass = discard one card. After acting you draw while the deck lasts.
 - Gold reached → diggers win: draw gold cards equal to player count, best nugget to the finder, then anticlockwise among diggers (auto-picks highest). Deck and hands run out → saboteurs win (1 sab: 4, 2–3: 3 each, 4: 2 each).
 - 3 rounds, most gold wins (ties share the win).
+- Identities stay secret: at round end each player only sees the winning side plus their own role and gold. Everyone's gold total is shown only when the game ends. The server never sends other players' roles.
+
+## Two-sided mode (lobby setting)
+The host can switch on 雙邊模式 before starting:
+- Three goal cards on the right **and** three on the left (columns −8 and +8); only one of the six is gold, so players must pick a side.
+- Deck, gold cards and role pool are doubled (role pool = classic table for half the players ×2); up to 20 players.
+- Mining can extend both left and right from the start card.
 
 ## Reconnect
 Each browser keeps a private token in localStorage; refreshing or reopening the page rejoins the same seat. If someone drops mid-game the host can skip their turn (auto-discards a random card).

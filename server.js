@@ -5,9 +5,9 @@ const crypto = require('crypto');
 const express = require('express');
 const { Server } = require('socket.io');
 const { Game, GameError } = require('./game');
+const R = require('./public/rules.js');
 
 const PORT = process.env.PORT || 3000;
-const MAX_PLAYERS = 10;
 const MIN_PLAYERS = 3;
 const ROOM_TTL_MS = 30 * 60 * 1000;
 
@@ -36,6 +36,7 @@ function stateFor(room, pid) {
     hostId: room.hostId,
     me: pid,
     phase: phaseOf(room),
+    settings: room.settings,
     players: room.players.map((p) => ({ id: p.id, name: p.name, connected: p.connected })),
     game: room.game ? room.game.view(pid) : null,
   };
@@ -83,7 +84,7 @@ io.on('connection', (socket) => {
   on('create', ({ name, token }) => {
     name = cleanName(name);
     if (!name) throw new GameError('請輸入名稱');
-    const room = { code: genCode(), hostId: null, players: [], game: null, lastActive: Date.now() };
+    const room = { code: genCode(), hostId: null, players: [], game: null, settings: { twoSided: false }, lastActive: Date.now() };
     const player = { id: newId(), token: String(token || newId()), name, connected: true, socketId: null };
     room.players.push(player);
     room.hostId = player.id;
@@ -102,7 +103,8 @@ io.on('connection', (socket) => {
     if (!player) {
       if (!name) throw new GameError('請輸入名稱');
       if (room.game) throw new GameError('遊戲已經開始咗');
-      if (room.players.length >= MAX_PLAYERS) throw new GameError('房間已滿（最多 10 人）');
+      const max = R.MAX_PLAYERS(room.settings.twoSided);
+      if (room.players.length >= max) throw new GameError(`房間已滿（最多 ${max} 人）`);
       if (room.players.some((p) => p.name === name)) throw new GameError('呢個名已經有人用');
       player = { id: newId(), token: String(token || newId()), name, connected: true, socketId: null };
       room.players.push(player);
@@ -143,6 +145,15 @@ io.on('connection', (socket) => {
     broadcast(room);
   });
 
+  on('settings', ({ twoSided }) => {
+    const { room, player } = ctx(socket);
+    requireHost(room, player);
+    if (room.game && room.game.phase !== 'gameEnd') throw new GameError('遊戲進行中唔可以改設定');
+    if (!twoSided && room.players.length > R.MAX_PLAYERS(false)) throw new GameError('超過 10 人要用雙邊模式');
+    room.settings.twoSided = !!twoSided;
+    broadcast(room);
+  });
+
   on('start', () => {
     const { room, player } = ctx(socket);
     requireHost(room, player);
@@ -150,7 +161,8 @@ io.on('connection', (socket) => {
     // drop anyone who left during a finished game
     room.players = room.players.filter((p) => p.connected || !room.game);
     if (room.players.length < MIN_PLAYERS) throw new GameError(`最少要 ${MIN_PLAYERS} 個玩家`);
-    room.game = new Game(room.players.map((p) => ({ id: p.id, name: p.name })));
+    if (room.players.length > R.MAX_PLAYERS(room.settings.twoSided)) throw new GameError('超過 10 人要開雙邊模式');
+    room.game = new Game(room.players.map((p) => ({ id: p.id, name: p.name })), { twoSided: room.settings.twoSided });
     broadcast(room);
   });
 

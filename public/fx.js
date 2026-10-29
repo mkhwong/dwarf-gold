@@ -20,15 +20,17 @@
   }
   function resize() {
     dpr = Math.min(2, window.devicePixelRatio || 1);
-    cv.width = innerWidth * dpr; cv.height = innerHeight * dpr;
+    cv.width = Math.round(cv.clientWidth * dpr); cv.height = Math.round(cv.clientHeight * dpr);
   }
   const wait = (ms) => new Promise((r) => setTimeout(r, reduce ? Math.min(ms, 350) : ms));
   const rnd = (a, b) => a + Math.random() * (b - a);
 
   // ---------- particles ----------
   function loop() {
+    if (cv.width !== Math.round(cv.clientWidth * dpr) || cv.height !== Math.round(cv.clientHeight * dpr)) resize();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, innerWidth, innerHeight);
     parts = parts.filter((p) => (p.life -= 1 / 60) > 0);
     for (const p of parts) {
       p.vy += p.g; p.vx *= p.drag; p.vy *= p.drag;
@@ -51,7 +53,7 @@
       }
       ctx.restore();
     }
-    raf = parts.length ? requestAnimationFrame(loop) : (ctx.clearRect(0, 0, innerWidth, innerHeight), null);
+    raf = parts.length ? requestAnimationFrame(loop) : (ctx.setTransform(1, 0, 0, 1, 0, 0), ctx.clearRect(0, 0, cv.width, cv.height), null);
   }
   function emit(n, mk) {
     if (reduce) return;
