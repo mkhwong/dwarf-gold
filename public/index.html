@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1310">
+<title>矮人掘金</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&family=Noto+Serif+TC:wght@900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- HOME -->
+<section id="home" class="screen">
+  <div class="brand">
+    <div class="brand-icon">⛏️</div>
+    <h1>矮人掘金</h1>
+    <p class="sub">3–10 人 · 金礦工 vs 破壞者</p>
+  </div>
+  <label class="field">你嘅名
+    <input id="nameInput" maxlength="12" placeholder="例如：阿明" autocomplete="nickname">
+  </label>
+  <button id="createBtn" class="btn primary big">開新房間</button>
+  <div class="divider"><span>或者</span></div>
+  <label class="field">房間代碼
+    <input id="codeInput" maxlength="4" placeholder="ABCD" autocapitalize="characters" autocomplete="off" class="code-input">
+  </label>
+  <button id="joinBtn" class="btn big">加入房間</button>
+  <details class="rules">
+    <summary>點玩？</summary>
+    <ul>
+      <li>每回合秘密分派身份：<b>金礦工</b>想由入口挖通道去金礦；<b>破壞者</b>想阻止佢哋。</li>
+      <li>輪到你：出一張牌，或者棄一張牌跳過，然後抽一張。</li>
+      <li><b>通道牌</b>要接得上入口，每邊都要夾得啱；可以轉 180°。</li>
+      <li><b>破壞</b>⛏️🔦🛒：工具壞咗就唔可以放通道，直至修好。</li>
+      <li><b>地圖</b>🗺️：偷睇一張目標牌。<b>坍方</b>💥：炸走一張通道。</li>
+      <li>挖到金礦 → 金礦工分金；牌出晒都挖唔到 → 破壞者分金。三回合後金最多者勝。</li>
+    </ul>
+  </details>
+</section>
+
+<!-- LOBBY -->
+<section id="lobby" class="screen" hidden>
+  <p class="label">房間代碼</p>
+  <button id="codeBig" class="code-big" title="複製邀請連結"></button>
+  <p class="hint">撳代碼複製邀請連結</p>
+  <h2 class="lobby-title">玩家 <span id="lobbyCount"></span></h2>
+  <ul id="lobbyList" class="lobby-list"></ul>
+  <div id="lobbyActions"></div>
+  <button id="leaveBtn" class="btn ghost">離開房間</button>
+</section>
+
+<!-- GAME -->
+<section id="game" class="screen game" hidden>
+  <header class="topbar">
+    <div class="tb-left"><span class="tb-code" id="gCode"></span><span id="gRound"></span></div>
+    <div class="tb-right"><span id="gDeck" class="pill"></span><button id="roleBtn" class="pill role-pill">身份</button></div>
+  </header>
+  <div id="seats" class="seats"></div>
+  <div id="status" class="status"></div>
+  <div class="board-wrap">
+    <div id="board" class="board"><div id="boardInner" class="board-inner"></div></div>
+    <div class="zoom">
+      <button data-z="-1">－</button><button data-z="1">＋</button><button data-z="0" title="置中">◎</button>
+    </div>
+  </div>
+  <div id="log" class="log"></div>
+  <div id="actionBar" class="action-bar"></div>
+  <div id="hand" class="hand"></div>
+</section>
+
+<div id="modal" class="modal" hidden><div class="modal-card" id="modalCard"></div></div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="rules.js"></script>
+<script src="fx.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
