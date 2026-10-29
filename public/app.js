@@ -16,8 +16,9 @@
   const socket = window.LocalServer || io({ transports: ['websocket', 'polling'] });
   let state = null;
   let selId = null, flipped = false;
-  const ZOOMS = [0.5, 0.65, 0.8, 1, 1.25, 1.5];
-  let zoomIdx = window.innerWidth < 500 ? 1 : 3;
+  // board scale: 'fit' shows the whole mine without scrolling; +/- switch to manual zoom
+  let zoomMode = 'fit', manualScale = 1;
+  const BOARD_PAD = 8;
   let roleShownRound = 0, resultShownKey = '', centeredRound = 0;
   let prevBoardKeys = new Set();
   let roleVisible = false;
@@ -191,21 +192,24 @@
         (cur && !cur.connected ? '（離線）' + (isHost() ? ' <button class="ab-btn danger" id="skipBtn">跳過佢</button>' : '') : '');
     }
 
-    renderBoard();
     renderLog();
     renderHand();
     renderActionBar();
+    renderBoard();
   }
 
   function renderBoard() {
     const g = state.game;
     const board = boardObj();
-    const z = ZOOMS[zoomIdx];
-    const css = getComputedStyle(document.documentElement);
-    const cw = parseFloat(css.getPropertyValue('--cw')) * z;
-    const ch = parseFloat(css.getPropertyValue('--ch')) * z;
     const b = R.bounds(board);
     const minX = b.minX - 1, minY = b.minY - 1, maxX = b.maxX + 1, maxY = b.maxY + 1;
+    const cols = maxX - minX + 1, rows = maxY - minY + 1;
+    const view = $('#board');
+    const availW = view.clientWidth - BOARD_PAD * 2, availH = view.clientHeight - BOARD_PAD * 2;
+    const fit = Math.max(0.3, Math.min(availW / (cols * 56), availH / (rows * 80), 2));
+    const z = zoomMode === 'fit' ? fit : manualScale;
+    renderBoard.fitScale = fit;
+    const cw = 56 * z, ch = 80 * z;
     const pos = (x, y) => `left:${(x - minX) * cw}px;top:${(y - minY) * ch}px;width:${cw}px;height:${ch}px`;
 
     const card = selCard();
@@ -231,19 +235,24 @@
     prevBoardKeys = keys;
 
     const inner = $('#boardInner');
-    inner.style.width = (maxX - minX + 1) * cw + 'px';
-    inner.style.height = (maxY - minY + 1) * ch + 'px';
+    const innerW = cols * cw, innerH = rows * ch;
+    inner.style.width = innerW + 'px';
+    inner.style.height = innerH + 'px';
+    inner.style.marginLeft = Math.max(BOARD_PAD, (view.clientWidth - innerW) / 2) + 'px';
+    inner.style.marginTop = Math.max(BOARD_PAD, (view.clientHeight - innerH) / 2) + 'px';
     inner.innerHTML = html;
 
-    if (centeredRound !== g.round) { centeredRound = g.round; requestAnimationFrame(() => centerBoard(minX, minY, cw, ch)); }
     renderBoard.geom = { minX, minY, cw, ch };
+    if (zoomMode === 'fit') { view.scrollLeft = 0; view.scrollTop = 0; }
+    else if (centeredRound !== g.round) { centeredRound = g.round; requestAnimationFrame(centerBoard); }
   }
   function centerBoard() {
     const geom = renderBoard.geom; if (!geom) return;
     const el = $('#board');
     // centre on the middle of the start→goal corridor
-    const cx = (4 - geom.minX + 0.5) * geom.cw + 24;
-    const cy = (0 - geom.minY + 0.5) * geom.ch + 24;
+    const r = $('#boardInner');
+    const cx = (4 - geom.minX + 0.5) * geom.cw + r.offsetLeft;
+    const cy = (0 - geom.minY + 0.5) * geom.ch + r.offsetTop;
     el.scrollLeft = cx - el.clientWidth / 2;
     el.scrollTop = cy - el.clientHeight / 2;
   }
@@ -268,7 +277,33 @@
           return `<button class="card ${c.id === selId ? 'sel' : ''} ${dim ? 'dim' : ''}" data-card="${c.id}">${cardFace(c, c.id === selId && flipped)}</button>`;
         }).join('')
       : `<div class="empty-hand"><img src="${ART('dwarf-tired')}" alt="">手上冇牌喇，等其他人出完…</div>`;
+    fanHand();
   }
+  // lay out the hand: one row if it fits, slight fan if overlap is small, otherwise two full-size rows
+  function fanHand() {
+    const el = $('#hand');
+    const cards = [...el.querySelectorAll('.card')];
+    cards.forEach((c) => { c.style.marginLeft = ''; c.style.width = ''; c.style.height = ''; });
+    el.classList.remove('fan', 'grid');
+    el.style.gridTemplateColumns = '';
+    if (cards.length < 2 || getComputedStyle(el).flexWrap === 'wrap') return;
+    const cs = getComputedStyle(el);
+    const avail = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const cw = cards[0].offsetWidth, gap = 8, n = cards.length;
+    if (n * cw + (n - 1) * gap <= avail) return;
+    const step = (avail - cw) / (n - 1);
+    if (step / cw >= 0.7) {
+      el.classList.add('fan');
+      cards.slice(1).forEach((c) => { c.style.marginLeft = (step - cw) + 'px'; });
+      return;
+    }
+    const cols = Math.ceil(n / 2);
+    const w = Math.min(108, Math.floor((avail - gap * (cols - 1)) / cols));
+    el.classList.add('grid');
+    el.style.gridTemplateColumns = `repeat(${cols}, ${w}px)`;
+    cards.forEach((c) => { c.style.width = w + 'px'; c.style.height = Math.round(w * 1.28) + 'px'; });
+  }
+
 
   function renderActionBar() {
     const g = state.game;
@@ -538,12 +573,25 @@
   document.querySelector('.zoom').onclick = (e) => {
     const b = e.target.closest('button'); if (!b) return;
     const z = Number(b.dataset.z);
-    if (z === 0) { centerBoard(); return; }
-    zoomIdx = Math.max(0, Math.min(ZOOMS.length - 1, zoomIdx + z));
+    if (z === 0) { zoomMode = 'fit'; renderBoard(); return; }
+    const cur = zoomMode === 'fit' ? renderBoard.fitScale || 1 : manualScale;
+    manualScale = Math.max(0.4, Math.min(2.5, cur * (z > 0 ? 1.25 : 0.8)));
+    zoomMode = 'manual';
+    centeredRound = 0;
     renderBoard();
   };
 
   // ---------- socket ----------
+  $('#log').addEventListener('click', () => {
+    $('#log').classList.toggle('open');
+    setTimeout(() => { if (state && state.game) { renderLog(); renderBoard(); } }, 220);
+  });
+  let resizeT;
+  addEventListener('resize', () => {
+    clearTimeout(resizeT);
+    resizeT = setTimeout(() => { if (state && state.game) { fanHand(); renderBoard(); } }, 120);
+  });
+
   socket.on('state', (s) => {
     const prev = state, prevGeom = renderBoard.geom;
     state = s;

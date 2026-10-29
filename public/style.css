@@ -307,3 +307,35 @@ img.fx-nugget { width: min(42vw, 170px); height: auto; top: 28%; }
 .fx-turn img { width: 22px; height: auto; vertical-align: -4px; animation: swing .5s .15s ease-in-out 2 alternate; transform-origin: 70% 70%; }
 @media (prefers-reduced-motion: reduce) { .fx-dwarf, .fx-tnt { animation: none !important; } }
 #fxStage.gold .fx-rays { top: 34%; }
+
+/* ===== bigger hand, board fits the screen ===== */
+.board-wrap { min-height: 200px; }
+.board-inner { margin: 0; }
+.zoom button[data-z="0"] { font-size: 13px; }
+.log { height: 24px; cursor: pointer; transition: height .2s; position: relative; }
+.log.open { height: 150px; }
+.hand { gap: 8px; padding-top: 18px; align-items: flex-end; }
+.hand.fan { overflow: visible; gap: 0; }
+.card { width: 92px; height: 118px; border-radius: 10px; position: relative; flex-shrink: 0; transition: transform .15s, margin .15s; }
+.card svg, .card .cimg { border-radius: 8px; }
+.card.sel { transform: translateY(-16px) scale(1.04); z-index: 5; }
+.hand.fan .card:not(.sel) { box-shadow: -6px 0 10px rgba(0,0,0,.45); }
+@media (min-width: 700px) {
+  .card { width: 112px; height: 142px; }
+  .log { height: 24px; }
+  .log.open { height: 170px; }
+}
+.hand.grid { display: grid; gap: 8px; justify-content: center; overflow: visible; padding-top: 14px; }
+.hand.grid .card.sel { transform: translateY(-6px) scale(1.03); }
+
+/* wide screens: board on the left at full height, hand and actions on the right */
+@media (min-width: 900px) {
+  .game { max-width: 1400px; display: grid; grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: auto auto auto auto auto minmax(0, 1fr); column-gap: 18px; }
+  .topbar, .seats, .status { grid-column: 1 / -1; }
+  .board-wrap { grid-column: 1; grid-row: 4 / 7; min-height: 0; margin-bottom: 16px; }
+  .log { grid-column: 2; grid-row: 4; margin-top: 0; }
+  .log.open { height: 200px; }
+  .action-bar { grid-column: 2; grid-row: 5; }
+  .hand { grid-column: 2; grid-row: 6; flex-wrap: wrap; align-content: flex-start; overflow-y: auto; overflow-x: visible; padding-top: 16px; }
+  .card { width: 116px; height: 148px; }
+}

@@ -22,7 +22,7 @@ body { background: var(--bg); }
 .board-wrap { margin: 0; }
 .log { margin: 6px 0 0; }
 .action-bar { padding: 6px 0 0; }
-.hand { padding: 10px 0 12px; }
+.hand { padding: 18px 0 12px; }
 .preview-note { text-align: center; color: var(--muted); font-size: 12px; margin-top: 18px; line-height: 1.6; }
 `;
 const note = `<p class="preview-note">預覽版：喺 Claude 入面試玩，AI 玩家代替朋友。<br>真人多人連線用 Render 伺服器版本。</p>`;
