@@ -96,6 +96,7 @@
         <div class="fx-shaft"></div>
         <div class="fx-lamp"></div>
         <div class="fx-intro-text">
+          <img class="fx-dwarf" src="art/dwarf-pick.webp" alt="">
           <span class="fx-eyebrow">第 ${round} / ${total} 回合</span>
           <b class="fx-big">${chars}</b>
           <span class="fx-sub">${round === total ? '最後一回合' : '金礦藏喺三張目標牌其中一張'}</span>
@@ -113,10 +114,10 @@
       if (CINEMATICS.goldStrike) return playClip(CINEMATICS.goldStrike);
       scene('gold', `
         <div class="fx-rays"></div>
-        <svg class="fx-nugget" viewBox="0 0 120 100"><polygon points="12,62 40,18 84,10 110,52 72,90 30,86" fill="#f6c93f" stroke="#8a5d0b" stroke-width="5"/><polygon points="40,30 62,22 58,42" fill="#fff6c4"/><polygon points="72,58 96,52 80,76" fill="#d79a1c"/></svg>
+        <img class="fx-nugget" src="art/dwarf-gold.webp" alt="">
         <div class="fx-stamp">金礦！</div>
         <div class="fx-who">${name} 挖通咗</div>`);
-      const cx = innerWidth / 2, cy = innerHeight * .42;
+      const cx = innerWidth / 2, cy = innerHeight * .34;
       await wait(380);
       emit(90, () => {
         const a = rnd(0, Math.PI * 2), sp = rnd(4, 12);
@@ -132,11 +133,11 @@
       if (CINEMATICS.sabWin) return playClip(CINEMATICS.sabWin);
       scene('boom', `
         <div class="fx-fuse"><span class="fx-spark"></span></div>
+        <img class="fx-tnt" src="art/tnt.webp" alt="">
         <div class="fx-flash"></div>
         <div class="fx-stamp red">坍塌！</div>
         <div class="fx-who">破壞者得逞，冇人挖到金</div>`);
       const sx = innerWidth / 2, sy = innerHeight * .42;
-      emit(1, () => ({}));
       await wait(1050);
       shake(game, 'fx-quake');
       emit(80, () => {
@@ -190,7 +191,7 @@
       init();
       const el = document.createElement('div');
       el.className = 'fx-turn';
-      el.innerHTML = '<span>⛏</span> 輪到你';
+      el.innerHTML = '<img src="art/pickaxe.webp" alt=""> 輪到你';
       document.getElementById('fx').appendChild(el);
       await wait(1100);
       el.remove();

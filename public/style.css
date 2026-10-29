@@ -271,3 +271,39 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   .fx-shaft, .fx-lamp, .fx-rays, .fx-big i, .fx-stamp, .fx-nugget, .flip-inner { animation-duration: .01s !important; }
 }
+
+/* ===== card art & clipart ===== */
+.brand-icon { display: block; width: 132px; height: auto; margin: 0 auto -6px; filter: drop-shadow(0 8px 18px rgba(0,0,0,.5)); font-size: 0; }
+.lobby-art { display: block; width: 150px; height: auto; margin: 0 auto 4px; filter: drop-shadow(0 6px 14px rgba(0,0,0,.5)); }
+.ico { width: 14px; height: 14px; object-fit: contain; vertical-align: -2px; margin-right: 1px; }
+.ico.deck { width: 11px; height: 14px; }
+.card { width: 62px; height: 80px; }
+.card .cimg { width: 100%; height: 100%; object-fit: contain; display: block; }
+.cimg.split { position: relative; }
+.cimg.split img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.cimg.split img:last-of-type { clip-path: polygon(58% 0, 100% 0, 100% 100%, 42% 100%); }
+.dual { position: absolute; left: 50%; bottom: 3px; translate: -50% 0; font-size: 9px; line-height: 1.4; padding: 0 3px; border-radius: 6px; background: rgba(0,0,0,.7); white-space: nowrap; }
+.cell .gback { width: 100%; height: 100%; object-fit: contain; display: block; }
+.cell .glabel, .flip .glabel { position: absolute; left: 50%; bottom: 8%; translate: -50% 0; font-size: 10px; font-weight: 900; color: #e8d3a3; background: rgba(20,14,10,.8); padding: 0 5px; border-radius: 4px; }
+.cell .goldart, .flip .goldart { position: absolute; left: 6%; top: 30%; width: 88%; height: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+.flip .front, .flip .back { position: absolute; }
+.flip img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.flip .back svg { width: 100%; height: 100%; display: block; }
+.flip-inner { animation: none; }
+.flip-inner.go { animation: flipIn .8s .1s cubic-bezier(.3,1.3,.5,1) both; }
+.flip.big { width: 168px; height: 210px; margin: 10px auto; }
+.empty-hand { display: flex; align-items: center; gap: 10px; padding: 4px 6px; }
+.empty-hand img { width: 64px; height: auto; }
+.rthumb { width: 22px; height: 28px; object-fit: cover; object-position: center 30%; border-radius: 4px; vertical-align: middle; margin-right: 6px; }
+.res-art { display: block; height: 96px; width: auto; max-width: 70%; margin: 0 auto 4px; filter: drop-shadow(0 6px 14px rgba(0,0,0,.5)); }
+.fx-dwarf { width: min(42vw, 170px); height: auto; transform-origin: 60% 90%; animation: dig .5s .2s ease-in-out 4 alternate both, rise .4s both; filter: drop-shadow(0 0 24px rgba(255,190,80,.35)); }
+@keyframes dig { from { rotate: -4deg; } to { rotate: 6deg; translate: 0 4px; } }
+img.fx-nugget { width: min(42vw, 170px); height: auto; top: 28%; }
+#fxStage.gold .fx-stamp { top: calc(28% + 160px); }
+#fxStage.gold .fx-who { top: calc(28% + 245px); }
+.fx-tnt { position: absolute; left: 50%; top: 42%; width: 84px; height: auto; translate: -20% -58%; animation: tntShake .12s 6 alternate .5s, tntGone .1s 1.05s forwards; }
+@keyframes tntShake { to { rotate: 4deg; } }
+@keyframes tntGone { to { opacity: 0; scale: 1.6; } }
+.fx-turn img { width: 22px; height: auto; vertical-align: -4px; animation: swing .5s .15s ease-in-out 2 alternate; transform-origin: 70% 70%; }
+@media (prefers-reduced-motion: reduce) { .fx-dwarf, .fx-tnt { animation: none !important; } }
+#fxStage.gold .fx-rays { top: 34%; }

@@ -50,6 +50,19 @@
   }
   const closeModal = () => { $('#modal').hidden = true; };
 
+  // ---------- art assets ----------
+  const CARD = (n) => `cards/${n}.webp`;
+  const ART = (n) => `art/${n}.webp`;
+  function roleArt(role, pid, round) {
+    let h = 7;
+    for (const ch of String(pid) + ':' + round) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return role === 'saboteur' ? CARD('sab-' + (h % 4 + 1)) : CARD('digger-' + (h % 7 + 1));
+  }
+  ['back', 'map', 'rockfall', 'broken-pick', 'broken-lamp', 'broken-cart', 'repair-pick', 'repair-lamp', 'repair-cart']
+    .forEach((n) => { new Image().src = CARD(n); });
+  ['dwarf-pick', 'dwarf-gold', 'dwarf-cart', 'dwarf-tired', 'dwarf-point', 'tnt', 'gold-pile', 'nugget', 'pickaxe']
+    .forEach((n) => { new Image().src = ART(n); });
+
   // ---------- tile art ----------
   const PT = { N: [28, 0], S: [28, 80], E: [56, 40], W: [0, 40] };
   function tileSVG(groups, o = {}) {
@@ -78,26 +91,26 @@
     return s + '</svg>';
   }
   function goalBackSVG(idx) {
-    return `<svg viewBox="0 0 56 80" xmlns="http://www.w3.org/2000/svg"><rect width="56" height="80" rx="4" fill="#24364a"/>
-      <rect x="4" y="4" width="48" height="72" rx="3" fill="none" stroke="#6aa5e0" stroke-opacity=".5" stroke-width="1.5" stroke-dasharray="3 3"/>
-      <text x="28" y="48" text-anchor="middle" font-size="28" font-weight="900" fill="#9cc4ec">?</text>
-      <text x="28" y="70" text-anchor="middle" font-size="10" fill="#9cc4ec">${R.GOAL_LABEL[idx]}</text></svg>`;
+    return `<img class="gback" src="${CARD('back')}" alt="目標牌"><span class="glabel">${R.GOAL_LABEL[idx]}</span>`;
   }
   function cellSVG(c) {
     if (c.kind === 'goal') {
       if (c.hidden) return goalBackSVG(c.goalIdx);
-      return tileSVG(R.groupsFor(c.goal, c.flipped), { gold: c.goal === 'gold', coal: c.goal !== 'gold' });
+      return tileSVG(R.groupsFor(c.goal, c.flipped), { gold: c.goal === 'gold', coal: c.goal !== 'gold' }) +
+        (c.goal === 'gold' ? `<img class="goldart" src="${ART('gold-pile')}" alt="金礦">` : '');
     }
     return tileSVG(R.groupsFor(c.shape, c.flipped), { start: c.kind === 'start' });
   }
   function cardFace(card, isFlipped) {
     if (card.type === 'path') return tileSVG(R.groupsFor(card.shape, isFlipped));
-    if (card.type === 'broken')
-      return `<div class="acard broken"><span class="ic x">${R.TOOL_ICON[card.tool]}</span>破壞${R.TOOL_NAME[card.tool]}</div>`;
-    if (card.type === 'repair')
-      return `<div class="acard repair"><span class="ic">${card.tools.map((t) => R.TOOL_ICON[t]).join('')}</span>修理</div>`;
-    if (card.type === 'map') return `<div class="acard map"><span class="ic">🗺️</span>地圖</div>`;
-    return `<div class="acard rockfall"><span class="ic">💥</span>坍方</div>`;
+    if (card.type === 'broken') return `<img class="cimg" src="${CARD('broken-' + card.tool)}" alt="破壞${R.TOOL_NAME[card.tool]}">`;
+    if (card.type === 'repair') {
+      if (card.tools.length === 1) return `<img class="cimg" src="${CARD('repair-' + card.tools[0])}" alt="修理${R.TOOL_NAME[card.tools[0]]}">`;
+      return `<div class="cimg split"><img src="${CARD('repair-' + card.tools[0])}" alt=""><img src="${CARD('repair-' + card.tools[1])}" alt="">
+        <span class="dual">${card.tools.map((t) => R.TOOL_ICON[t]).join('')}</span></div>`;
+    }
+    if (card.type === 'map') return `<img class="cimg" src="${CARD('map')}" alt="地圖">`;
+    return `<img class="cimg" src="${CARD('rockfall')}" alt="坍方">`;
   }
   function cardDesc(card) {
     switch (card.type) {
@@ -152,7 +165,7 @@
     const meId = me();
     $('#gCode').textContent = state.code;
     $('#gRound').textContent = `第 ${g.round}/${g.totalRounds} 回合`;
-    $('#gDeck').textContent = `🂠 ${g.deckCount}`;
+    $('#gDeck').innerHTML = `<img class="ico deck" src="${CARD('back')}" alt="牌堆"> ${g.deckCount}`;
     const rb = $('#roleBtn');
     rb.className = 'pill role-pill' + (roleVisible ? ' ' + g.role : '');
     rb.textContent = roleVisible ? (g.role === 'saboteur' ? '🧨 破壞者' : '⛏️ 金礦工') : '👁 身份';
@@ -163,7 +176,7 @@
       const br = R.TOOLS.filter((t) => s.broken[t]).map((t) => R.TOOL_ICON[t]).join('');
       return `<div data-seat="${s.id}" class="seat ${s.id === g.turnPid ? 'turn' : ''} ${s.id === meId ? 'me' : ''} ${p.connected === false ? 'off' : ''}">
         <div class="s-name">${esc(p.name || '?')}</div>
-        <div class="s-meta"><span>🂠${s.handCount}</span><span>💰${s.score}</span></div>
+        <div class="s-meta"><span>🂠${s.handCount}</span><span><img class="ico" src="${ART('nugget')}" alt="金">${s.score}</span></div>
         <div class="s-meta s-broken">${br ? br + ' 壞' : '&nbsp;'}</div></div>`;
     }).join('');
 
@@ -254,7 +267,7 @@
           const dim = c.type === 'path' && hasBroken(me());
           return `<button class="card ${c.id === selId ? 'sel' : ''} ${dim ? 'dim' : ''}" data-card="${c.id}">${cardFace(c, c.id === selId && flipped)}</button>`;
         }).join('')
-      : `<div class="empty-hand">手上冇牌喇，等其他人出完…</div>`;
+      : `<div class="empty-hand"><img src="${ART('dwarf-tired')}" alt="">手上冇牌喇，等其他人出完…</div>`;
   }
 
   function renderActionBar() {
@@ -351,17 +364,23 @@
     showModal(`
       <h2>${isNew ? `第 ${g.round} 回合` : '你嘅身份'}</h2>
       <p>確保冇人望住你個 mon 先撳</p>
+      <div class="flip big"><div class="flip-inner" id="roleFlip">
+        <div class="front"><img src="${CARD('back')}" alt="身份牌背面"></div>
+        <div class="back"><img src="${roleArt(g.role, me(), g.round)}" alt="${sab ? '破壞者' : '金礦工'}"></div>
+      </div></div>
       <div id="roleReveal" hidden>
-        <div class="role-big">${sab ? '🧨' : '⛏️'}</div>
         <div class="role-name ${g.role}">${sab ? '破壞者' : '金礦工'}</div>
         <p>${sab ? '暗中阻止金礦工挖到金礦！' : '同伴合作，挖一條路去金礦！'}</p>
       </div>
-      <button class="btn primary" id="revealBtn">👁 睇身份</button>
+      <button class="btn primary" id="revealBtn">👁 翻開身份牌</button>
       <button class="btn" id="closeRole" hidden>收埋 · 開始</button>`, (el) => {
       el.querySelector('#revealBtn').onclick = (e) => {
-        el.querySelector('#roleReveal').hidden = false;
+        el.querySelector('#roleFlip').classList.add('go');
         e.target.hidden = true;
-        el.querySelector('#closeRole').hidden = false;
+        setTimeout(() => {
+          el.querySelector('#roleReveal').hidden = false;
+          el.querySelector('#closeRole').hidden = false;
+        }, 500);
       };
       el.querySelector('#closeRole').onclick = () => {
         closeModal();
@@ -379,7 +398,7 @@
     const rows = [...g.seats].sort((a, b) => b.score - a.score).map((s) => {
       const role = res.roles[s.id];
       const won = role === res.winner;
-      return `<tr class="${won ? 'win' : ''}"><td>${esc(nameOf(s.id))}<span class="badge ${role}">${role === 'saboteur' ? '破壞者' : '金礦工'}</span>${res.finder === s.id ? ' 💰' : ''}</td>
+      return `<tr class="${won ? 'win' : ''}"><td><img class="rthumb" src="${roleArt(role, s.id, g.round)}" alt="">${esc(nameOf(s.id))}<span class="badge ${role}">${role === 'saboteur' ? '破壞者' : '金礦工'}</span>${res.finder === s.id ? ` <img class="ico" src="${ART('nugget')}" alt="挖到金">` : ''}</td>
         <td class="r gain">${res.gains[s.id] ? '+' + res.gains[s.id] : ''}</td><td class="r">${s.score}</td></tr>`;
     }).join('');
     let title = dig ? '⛏️ 金礦工勝利！' : '🧨 破壞者勝利！';
@@ -394,6 +413,7 @@
              : `<button class="btn primary" id="nextBtn">開始第 ${g.round + 1} 回合</button>`)
       : `<p class="waiting">等房主${end ? '決定' : '開始下一回合'}…</p>`;
     showModal(`
+      <img class="res-art" src="${end ? ART('dwarf-gold') : dig ? ART('dwarf-cart') : ART('tnt')}" alt="">
       <h2>${title}</h2>
       <p>第 ${g.round}/${g.totalRounds} 回合完結</p>
       ${extra}
@@ -500,9 +520,9 @@
       if (r.ok && r.peek) {
         selId = null;
         const gold = r.peek.goal === 'gold';
-        const face = gold ? tileSVG(R.groupsFor('gold', false), { gold: true }) : tileSVG(R.groupsFor('coal1', false), { coal: true });
+        const face = cellSVG({ kind: 'goal', goal: gold ? 'gold' : 'coal1', flipped: false });
         showModal(`<h2>🗺️ ${R.GOAL_LABEL[r.peek.goalIdx]}方目標</h2>
-          <div class="flip"><div class="flip-inner"><div class="front">${goalBackSVG(r.peek.goalIdx)}</div><div class="back">${face}</div></div></div>
+          <div class="flip"><div class="flip-inner go"><div class="front">${goalBackSVG(r.peek.goalIdx)}</div><div class="back">${face}</div></div></div>
           <div class="role-name ${gold ? 'digger' : 'saboteur'}">${gold ? '金礦！' : '煤礦'}</div>
           <p>只有你知道。地圖上會幫你標記住。</p><button class="btn primary" id="okPeek">知道</button>`,
           (el) => { el.querySelector('#okPeek').onclick = closeModal; });

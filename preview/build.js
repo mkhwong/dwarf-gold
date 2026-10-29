@@ -55,4 +55,5 @@ ${read('public/app.js')}
 `;
 fs.mkdirSync(path.join(__dirname, 'dist'), { recursive: true });
 fs.writeFileSync(path.join(__dirname, 'dist', 'dwarf-gold.html'), out);
+for (const d of ['cards', 'art']) fs.cpSync(path.join(root, 'public', d), path.join(__dirname, 'dist', d), { recursive: true });
 console.log('built', (out.length / 1024).toFixed(1) + ' KB');
